@@ -17,57 +17,17 @@ import { ProfilePage } from "@/components/pages/profile";
 import { SettingsPage } from "@/components/pages/settings";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { toast } from "sonner";
-
-// Types
-interface IframeData {
-  id: string;
-  title: string;
-  src: string;
-  viewers?: string;
-}
-
-interface IframesMap {
-  [key: string]: IframeData;
-}
+import { useStreamingData } from "@/hooks/use-streaming-data";
 
 const queryClient = new QueryClient();
 
 function StreamView() {
-  const [activeTab, setActiveTab] = useState("scheduler");
-  const [isLoading, setIsLoading] = useState<Record<string, boolean>>({});
+  const { iframes, isLoading, activeTab, setActiveTab, handleReloadIframe, handleIframeLoad } = useStreamingData();
   const [favorites, setFavorites] = useState<string[]>([]);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [fullscreenIframeId, setFullscreenIframeId] = useState<string | null>(null);
   const [currentRoute, setCurrentRoute] = useState("streaming");
   const isOnline = useOnlineStatus();
-
-  // Iframes configuration
-  const iframes: IframesMap = {
-    scheduler: {
-      id: "retail_scheduler",
-      title: "Scheduler Stream",
-      src: "https://placehold.co/1280x720?text=Scheduler+Stream",
-      viewers: "2.5K",
-    },
-    winmix: {
-      id: "winmix-iframe",
-      title: "Winmix Stream",
-      src: "https://placehold.co/1280x720?text=Winmix+Stream",
-      viewers: "1.8K",
-    },
-    tippmix: {
-      id: "tippmix-iframe",
-      title: "Tippmix V-Sport",
-      src: "https://placehold.co/1280x720?text=Tippmix+Stream",
-      viewers: "3.2K",
-    },
-    sportradar: {
-      id: "sportradar-iframe",
-      title: "Sportradar Archive",
-      src: "https://placehold.co/1280x720?text=Sportradar+Stream",
-      viewers: "1.4K",
-    },
-  };
 
   // Load favorites from localStorage on mount
   useEffect(() => {
@@ -82,29 +42,17 @@ function StreamView() {
     localStorage.setItem("stream-favorites", JSON.stringify(favorites));
   }, [favorites]);
 
-  const handleReloadIframe = useCallback(
+  const handleReloadWrapper = useCallback(
     (iframeId: string) => {
       if (!isOnline) {
         toast.error("Cannot reload while offline");
         return;
       }
-      setIsLoading((prev) => ({ ...prev, [iframeId]: true }));
-      const iframe = document.getElementById(iframeId) as HTMLIFrameElement;
-      if (iframe) {
-        const currentSrc = iframe.src;
-        iframe.src = "about:blank";
-        setTimeout(() => {
-          iframe.src = currentSrc;
-        }, 100);
-      }
+      handleReloadIframe(iframeId, isOnline);
       toast.success("Reloading stream...");
     },
-    [isOnline]
+    [isOnline, handleReloadIframe]
   );
-
-  const handleIframeLoad = useCallback((iframeId: string) => {
-    setIsLoading((prev) => ({ ...prev, [iframeId]: false }));
-  }, []);
 
   const toggleFullscreen = useCallback(
     (iframeId: string) => {
@@ -322,6 +270,130 @@ function StreamView() {
       )}
     </div>
   );
+
+  function renderRoute() {
+    switch (currentRoute) {
+      case "profile":
+        return <ProfilePage />;
+      case "settings":
+        return <SettingsPage />;
+      default:
+        return (
+          <main className="container mx-auto px-4 pb-20">
+            <div className="flex justify-between items-center my-4">
+              <h1 className="text-xl font-medium">Live Streams</h1>
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="hidden sm:flex"
+                >
+                  <Star className="h-4 w-4 mr-2" />
+                  Favorites
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="hidden sm:flex"
+                >
+                  Filters
+                </Button>
+              </div>
+            </div>
+
+            <Tabs 
+              defaultValue={activeTab}
+              onValueChange={setActiveTab}
+              className="w-full"
+            >
+              <TabsList className="grid grid-cols-4 mb-4">
+                {Object.entries(iframes).map(([key, { title }]) => (
+                  <TabsTrigger key={key} value={key} className="text-xs sm:text-sm">
+                    {title.split(' ')[0]}
+                  </TabsTrigger>
+                ))}
+              </TabsList>
+
+              {Object.entries(iframes).map(([key, { id, title, src, viewers }]) => (
+                <TabsContent key={key} value={key} className="mt-0">
+                  <Card>
+                    <CardHeader className="p-4 pb-0">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <div className="w-2 h-2 rounded-full bg-stream-online animate-pulse" />
+                          <h2 className="text-lg font-medium">{title}</h2>
+                        </div>
+                        <div className="flex gap-2">
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            onClick={() => toggleFavorite(key)}
+                          >
+                            {favorites.includes(key) ? (
+                              <Star className="h-4 w-4 text-yellow-500" />
+                            ) : (
+                              <StarOff className="h-4 w-4" />
+                            )}
+                          </Button>
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            onClick={() => handleReloadWrapper(id)}
+                            disabled={!isOnline}
+                          >
+                            <RefreshCw
+                              className={`h-4 w-4 ${isLoading[id] ? "animate-spin" : ""}`}
+                            />
+                          </Button>
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            onClick={() => toggleFullscreen(id)}
+                          >
+                            <Maximize2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </div>
+                    </CardHeader>
+                    <CardContent className="p-4 pt-2">
+                      <div className="relative aspect-video w-full overflow-hidden rounded-md bg-muted">
+                        <IframeWrapper
+                          id={id}
+                          src={src}
+                          title={title}
+                          isLoading={isLoading[id] || false}
+                          isOnline={isOnline}
+                          onLoad={() => handleIframeLoad(id)}
+                        />
+                      </div>
+                    </CardContent>
+                    <CardFooter className="p-4 pt-0">
+                      <div className="flex items-center justify-between w-full">
+                        <div className="flex items-center gap-2 text-muted-foreground text-sm">
+                          <Users className="h-4 w-4" />
+                          <span>{viewers} viewers</span>
+                        </div>
+                        <div className="flex items-center gap-4">
+                          <div className="flex items-center gap-1 text-sm text-muted-foreground">
+                            <Signal className="h-4 w-4" />
+                            <span>HD</span>
+                          </div>
+                          <div className="flex items-center gap-1 text-sm text-muted-foreground">
+                            <div className="h-2 w-2 rounded-full bg-stream-live animate-pulse" />
+                            <Clock className="h-4 w-4" />
+                            <span>Live</span>
+                          </div>
+                        </div>
+                      </div>
+                    </CardFooter>
+                  </Card>
+                </TabsContent>
+              ))}
+            </Tabs>
+          </main>
+        );
+    }
+  }
 }
 
 export default function App() {
