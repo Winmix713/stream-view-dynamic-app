@@ -14,32 +14,17 @@
     "noEmit": true,
     "jsx": "react-jsx",
 
-    /* Lovable-compatible linting */
+    /* Linting */
     "strict": false,
     "noUnusedLocals": false,
     "noUnusedParameters": false,
     "noImplicitAny": false,
-    "noFallthroughCasesInSwitch": true,
-    "exactOptionalPropertyTypes": false,
+    "noFallthroughCasesInSwitch": false,
 
-    /* Path mapping */
     "baseUrl": ".",
     "paths": {
       "@/*": ["./src/*"]
-    },
-
-    /* Additional options for better compatibility */
-    "allowSyntheticDefaultImports": true,
-    "esModuleInterop": true,
-    "forceConsistentCasingInFileNames": true,
-    "resolveJsonModule": true
+    }
   },
-  "include": ["src"],
-  "exclude": [
-    "node_modules",
-    "dist",
-    "**/*.test.*",
-    "**/*.spec.*",
-    "**/*.stories.*"
-  ]
+  "include": ["src"]
 }
