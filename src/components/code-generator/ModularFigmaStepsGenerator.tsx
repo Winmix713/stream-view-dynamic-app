@@ -1,3 +1,4 @@
+
 import React from 'react';
 import { Code, RefreshCw, Download, Eye } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -10,6 +11,7 @@ import { ProgressIndicator } from './components/ProgressIndicator';
 import { SuccessSummary } from './components/SuccessSummary';
 import { PreviewPanel } from './components/PreviewPanel';
 import { BatchProgressIndicator } from './components/BatchProgressIndicator';
+import { ErrorBoundary } from '@/components/ErrorBoundary';
 
 /**
  * Main Generator Component (Internal)
@@ -17,7 +19,49 @@ import { BatchProgressIndicator } from './components/BatchProgressIndicator';
  */
 const GeneratorContent: React.FC = () => {
   const { state, actions } = useFigmaSteps();
-  const { stepStatus, uiState, stepData } = state;
+  const { connection, codeGeneration, ui } = state;
+
+  // Create legacy state structure for backward compatibility
+  const legacyState = {
+    stepData: {
+      figmaUrl: connection.figmaUrl,
+      accessToken: connection.accessToken,
+      figmaData: connection.figmaData,
+      svgCode: codeGeneration.svgCode,
+      generatedTsxCode: codeGeneration.generatedTsxCode,
+      cssCode: codeGeneration.cssCode,
+      jsxCode: codeGeneration.jsxCode,
+      moreCssCode: codeGeneration.moreCssCode,
+      finalTsxCode: codeGeneration.finalTsxCode,
+      finalCssCode: codeGeneration.finalCssCode,
+      batchProcessing: {
+        isActive: false,
+        mode: 'single' as const,
+        files: [],
+        currentFileIndex: 0,
+        totalProgress: 0,
+        successCount: 0,
+        errorCount: 0,
+        completedFiles: [],
+        failedFiles: []
+      }
+    },
+    stepStatus: {
+      step1: connection.status,
+      step2: codeGeneration.stepStatus.step2,
+      step3: codeGeneration.stepStatus.step3,
+      step4: codeGeneration.stepStatus.step4
+    },
+    uiState: {
+      expandedBlocks: ui.expandedBlocks,
+      previewMode: ui.previewMode,
+      errors: { 
+        step1: connection.error || '',
+        ...codeGeneration.errors 
+      },
+      progress: ui.progress
+    }
+  };
 
   return (
     <div className="min-h-screen bg-gray-900 p-6">
@@ -40,7 +84,7 @@ const GeneratorContent: React.FC = () => {
           
           {/* Header Actions */}
           <div className="flex gap-2">
-            {stepStatus.step4 === 'success' && (
+            {legacyState.stepStatus.step4 === 'success' && (
               <>
                 <Button
                   variant="outline"
@@ -54,7 +98,7 @@ const GeneratorContent: React.FC = () => {
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => actions.setUIState({ previewMode: !uiState.previewMode })}
+                  onClick={() => actions.setUIState({ previewMode: !ui.previewMode })}
                   className="text-gray-300 border-gray-600 hover:bg-gray-800"
                 >
                   <Eye className="w-4 h-4 mr-2" />
@@ -78,25 +122,37 @@ const GeneratorContent: React.FC = () => {
         <ProgressIndicator />
 
         {/* Batch Processing Indicator */}
-        {stepData.batchProcessing.mode === 'batch' && stepData.batchProcessing.files.length > 0 && (
+        {legacyState.stepData.batchProcessing.mode === 'batch' && legacyState.stepData.batchProcessing.files.length > 0 && (
           <div className="mb-8">
-            <BatchProgressIndicator batchState={stepData.batchProcessing} />
+            <BatchProgressIndicator batchState={legacyState.stepData.batchProcessing} />
           </div>
         )}
 
         {/* 4-Step Grid */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
-          <Step1Configuration />
-          <Step2SvgGeneration />
-          <Step3CssImplementation />
-          <Step4FinalGeneration />
+          <ErrorBoundary>
+            <Step1Configuration />
+          </ErrorBoundary>
+          <ErrorBoundary>
+            <Step2SvgGeneration />
+          </ErrorBoundary>
+          <ErrorBoundary>
+            <Step3CssImplementation />
+          </ErrorBoundary>
+          <ErrorBoundary>
+            <Step4FinalGeneration />
+          </ErrorBoundary>
         </div>
 
         {/* Success Summary */}
-        <SuccessSummary />
+        <ErrorBoundary>
+          <SuccessSummary />
+        </ErrorBoundary>
 
         {/* Preview Panel */}
-        <PreviewPanel />
+        <ErrorBoundary>
+          <PreviewPanel />
+        </ErrorBoundary>
       </div>
     </div>
   );
@@ -108,9 +164,11 @@ const GeneratorContent: React.FC = () => {
  */
 export const ModularFigmaStepsGenerator: React.FC = () => {
   return (
-    <FigmaStepsProvider>
-      <GeneratorContent />
-    </FigmaStepsProvider>
+    <ErrorBoundary>
+      <FigmaStepsProvider>
+        <GeneratorContent />
+      </FigmaStepsProvider>
+    </ErrorBoundary>
   );
 };
 
