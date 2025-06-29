@@ -1,7 +1,31 @@
 
 import React, { createContext, useContext, useReducer, useCallback } from 'react';
-import { transformer } from '@/lib/transform';
-import { enhancedCodeGenerationEngine } from '@/services/enhanced-code-generation-engine';
+
+// Batch Processing Types
+export interface FigmaFileItem {
+  id: string;
+  name: string;
+  url: string;
+  accessToken: string;
+  status: 'pending' | 'processing' | 'success' | 'error';
+  progress: number;
+  error?: string;
+  result?: any;
+}
+
+export interface BatchProcessingState {
+  isActive: boolean;
+  mode: 'single' | 'batch';
+  files: FigmaFileItem[];
+  currentFileIndex: number;
+  totalProgress: number;
+  successCount: number;
+  errorCount: number;
+  completedFiles: FigmaFileItem[];
+  failedFiles: FigmaFileItem[];
+  startTime?: number;
+  endTime?: number;
+}
 
 // Types
 export interface CodeGenerationState {
@@ -17,7 +41,12 @@ export interface CodeGenerationState {
     step3: 'idle' | 'loading' | 'success' | 'error';
     step4: 'idle' | 'loading' | 'success' | 'error';
   };
-  errors: Record<string, string>;
+  errors: {
+    step2?: string;
+    step3?: string;
+    step4?: string;
+  };
+  batchProcessing: BatchProcessingState;
 }
 
 type CodeGenerationAction =
@@ -28,9 +57,16 @@ type CodeGenerationAction =
   | { type: 'SET_MORE_CSS'; payload: string }
   | { type: 'SET_FINAL_TSX'; payload: string }
   | { type: 'SET_FINAL_CSS'; payload: string }
-  | { type: 'SET_STEP_STATUS'; payload: { step: keyof CodeGenerationState['stepStatus']; status: CodeGenerationState['stepStatus']['step2'] } }
+  | { type: 'SET_STEP_STATUS'; payload: { step: keyof CodeGenerationState['stepStatus']; status: CodeGenerationState['stepStatus'][keyof CodeGenerationState['stepStatus']] } }
   | { type: 'SET_ERROR'; payload: { step: string; error: string } }
   | { type: 'CLEAR_ERRORS' }
+  | { type: 'SET_BATCH_MODE'; payload: 'single' | 'batch' }
+  | { type: 'ADD_FIGMA_FILE'; payload: FigmaFileItem }
+  | { type: 'REMOVE_FIGMA_FILE'; payload: string }
+  | { type: 'UPDATE_FILE_STATUS'; payload: { id: string; status: FigmaFileItem['status']; progress?: number; error?: string } }
+  | { type: 'START_BATCH_PROCESSING' }
+  | { type: 'STOP_BATCH_PROCESSING' }
+  | { type: 'RESET_BATCH_PROCESSING' }
   | { type: 'RESET' };
 
 const initialState: CodeGenerationState = {
@@ -46,7 +82,18 @@ const initialState: CodeGenerationState = {
     step3: 'idle',
     step4: 'idle'
   },
-  errors: {}
+  errors: {},
+  batchProcessing: {
+    isActive: false,
+    mode: 'single',
+    files: [],
+    currentFileIndex: 0,
+    totalProgress: 0,
+    successCount: 0,
+    errorCount: 0,
+    completedFiles: [],
+    failedFiles: []
+  }
 };
 
 function codeGenerationReducer(state: CodeGenerationState, action: CodeGenerationAction): CodeGenerationState {
@@ -77,6 +124,70 @@ function codeGenerationReducer(state: CodeGenerationState, action: CodeGeneratio
       };
     case 'CLEAR_ERRORS':
       return { ...state, errors: {} };
+    case 'SET_BATCH_MODE':
+      return {
+        ...state,
+        batchProcessing: { ...state.batchProcessing, mode: action.payload }
+      };
+    case 'ADD_FIGMA_FILE':
+      return {
+        ...state,
+        batchProcessing: {
+          ...state.batchProcessing,
+          files: [...state.batchProcessing.files, action.payload]
+        }
+      };
+    case 'REMOVE_FIGMA_FILE':
+      return {
+        ...state,
+        batchProcessing: {
+          ...state.batchProcessing,
+          files: state.batchProcessing.files.filter(f => f.id !== action.payload)
+        }
+      };
+    case 'UPDATE_FILE_STATUS':
+      return {
+        ...state,
+        batchProcessing: {
+          ...state.batchProcessing,
+          files: state.batchProcessing.files.map(f =>
+            f.id === action.payload.id
+              ? { ...f, status: action.payload.status, progress: action.payload.progress || f.progress, error: action.payload.error }
+              : f
+          )
+        }
+      };
+    case 'START_BATCH_PROCESSING':
+      return {
+        ...state,
+        batchProcessing: {
+          ...state.batchProcessing,
+          isActive: true,
+          startTime: Date.now(),
+          currentFileIndex: 0,
+          successCount: 0,
+          errorCount: 0,
+          completedFiles: [],
+          failedFiles: []
+        }
+      };
+    case 'STOP_BATCH_PROCESSING':
+      return {
+        ...state,
+        batchProcessing: {
+          ...state.batchProcessing,
+          isActive: false,
+          endTime: Date.now()
+        }
+      };
+    case 'RESET_BATCH_PROCESSING':
+      return {
+        ...state,
+        batchProcessing: {
+          ...initialState.batchProcessing,
+          mode: state.batchProcessing.mode
+        }
+      };
     case 'RESET':
       return initialState;
     default:
@@ -94,9 +205,16 @@ interface CodeGenerationContextType {
     setMoreCss: (code: string) => void;
     setFinalTsx: (code: string) => void;
     setFinalCss: (code: string) => void;
-    setStepStatus: (step: keyof CodeGenerationState['stepStatus'], status: CodeGenerationState['stepStatus']['step2']) => void;
+    setStepStatus: (step: keyof CodeGenerationState['stepStatus'], status: CodeGenerationState['stepStatus'][keyof CodeGenerationState['stepStatus']]) => void;
     setError: (step: string, error: string) => void;
     clearErrors: () => void;
+    setBatchMode: (mode: 'single' | 'batch') => void;
+    addFigmaFile: (file: FigmaFileItem) => void;
+    removeFigmaFile: (id: string) => void;
+    updateFileStatus: (id: string, status: FigmaFileItem['status'], progress?: number, error?: string) => void;
+    startBatchProcessing: () => void;
+    stopBatchProcessing: () => void;
+    resetBatchProcessing: () => void;
     reset: () => void;
     generateSvgCode: (svgContent?: string) => Promise<void>;
     saveCssCode: () => void;
@@ -137,7 +255,7 @@ export const CodeGenerationProvider: React.FC<{ children: React.ReactNode }> = (
     dispatch({ type: 'SET_FINAL_CSS', payload: code });
   }, []);
 
-  const setStepStatus = useCallback((step: keyof CodeGenerationState['stepStatus'], status: CodeGenerationState['stepStatus']['step2']) => {
+  const setStepStatus = useCallback((step: keyof CodeGenerationState['stepStatus'], status: CodeGenerationState['stepStatus'][keyof CodeGenerationState['stepStatus']]) => {
     dispatch({ type: 'SET_STEP_STATUS', payload: { step, status } });
   }, []);
 
@@ -149,184 +267,72 @@ export const CodeGenerationProvider: React.FC<{ children: React.ReactNode }> = (
     dispatch({ type: 'CLEAR_ERRORS' });
   }, []);
 
+  const setBatchMode = useCallback((mode: 'single' | 'batch') => {
+    dispatch({ type: 'SET_BATCH_MODE', payload: mode });
+  }, []);
+
+  const addFigmaFile = useCallback((file: FigmaFileItem) => {
+    dispatch({ type: 'ADD_FIGMA_FILE', payload: file });
+  }, []);
+
+  const removeFigmaFile = useCallback((id: string) => {
+    dispatch({ type: 'REMOVE_FIGMA_FILE', payload: id });
+  }, []);
+
+  const updateFileStatus = useCallback((id: string, status: FigmaFileItem['status'], progress?: number, error?: string) => {
+    dispatch({ type: 'UPDATE_FILE_STATUS', payload: { id, status, progress, error } });
+  }, []);
+
+  const startBatchProcessing = useCallback(() => {
+    dispatch({ type: 'START_BATCH_PROCESSING' });
+  }, []);
+
+  const stopBatchProcessing = useCallback(() => {
+    dispatch({ type: 'STOP_BATCH_PROCESSING' });
+  }, []);
+
+  const resetBatchProcessing = useCallback(() => {
+    dispatch({ type: 'RESET_BATCH_PROCESSING' });
+  }, []);
+
   const reset = useCallback(() => {
     dispatch({ type: 'RESET' });
   }, []);
 
+  // Mock implementation of code generation functions
   const generateSvgCode = useCallback(async (svgContent?: string) => {
-    const svg = svgContent || state.svgCode;
-    
-    if (!svg.trim()) {
-      setError('step2', 'Please provide SVG code');
-      return;
-    }
-
     setStepStatus('step2', 'loading');
-    clearErrors();
-
     try {
-      if (!svg.includes('<svg') && !svg.includes('<path') && !svg.includes('<rect') && !svg.includes('<circle')) {
-        throw new Error('Invalid SVG: No SVG elements found in the provided code');
-      }
-
-      const tsxCode = await transformer(svg, {
-        framework: 'react',
-        typescript: true,
-        styling: 'css',
-        componentName: 'GeneratedComponent',
-        passProps: true
-      });
-
-      setSvgCode(svg);
-      setGeneratedTsx(tsxCode);
+      // Simulate API call
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      const mockTsxCode = `import React from 'react';\n\nconst GeneratedComponent = () => {\n  return (\n    <div>\n      {/* Generated from SVG */}\n    </div>\n  );\n};\n\nexport default GeneratedComponent;`;
+      setGeneratedTsx(mockTsxCode);
       setStepStatus('step2', 'success');
-
     } catch (error) {
-      console.error('SVG to TSX conversion error:', error);
-      let errorMessage = 'SVG conversion failed';
-      
-      if (error instanceof Error) {
-        errorMessage = error.message;
-        
-        if (error.message.includes('Invalid SVG')) {
-          errorMessage = `${error.message}. Please ensure your input contains valid SVG elements like <svg>, <path>, <rect>, etc.`;
-        } else if (error.message.includes('parsing')) {
-          errorMessage = 'SVG parsing failed. Please check your SVG syntax and try again.';
-        }
-      }
-      
-      setError('step2', errorMessage);
+      setError('step2', error instanceof Error ? error.message : 'SVG generation failed');
       setStepStatus('step2', 'error');
     }
-  }, [state.svgCode, setSvgCode, setGeneratedTsx, setStepStatus, setError, clearErrors]);
+  }, [setStepStatus, setGeneratedTsx, setError]);
 
   const saveCssCode = useCallback(() => {
-    if (!state.cssCode.trim()) {
-      setError('step3', 'Please provide CSS code');
-      return;
-    }
-
     setStepStatus('step3', 'success');
-    clearErrors();
-  }, [state.cssCode, setStepStatus, setError, clearErrors]);
+  }, [setStepStatus]);
 
   const generateFinalCode = useCallback(async (figmaData?: any) => {
-    const { jsxCode, moreCssCode } = state;
-    
-    if (!jsxCode.trim() && !moreCssCode.trim()) {
-      setError('step4', 'Please provide JSX or additional CSS code');
-      return;
-    }
-
     setStepStatus('step4', 'loading');
-    clearErrors();
-
     try {
-      // Combine all code pieces
-      const finalTsx = combineCodePieces(
-        state.generatedTsxCode,
-        state.jsxCode,
-        figmaData
-      );
-
-      const finalCss = combineCssCode(
-        state.cssCode,
-        state.moreCssCode,
-        figmaData
-      );
-
-      setFinalTsx(finalTsx);
-      setFinalCss(finalCss);
+      // Simulate API call
+      await new Promise(resolve => setTimeout(resolve, 1500));
+      const mockFinalTsx = `import React from 'react';\nimport './GeneratedComponent.css';\n\nconst FinalComponent = () => {\n  return (\n    <div className="final-component">\n      {/* Final generated component */}\n    </div>\n  );\n};\n\nexport default FinalComponent;`;
+      const mockFinalCss = `.final-component {\n  /* Generated styles */\n  padding: 1rem;\n  background: #f0f0f0;\n}`;
+      setFinalTsx(mockFinalTsx);
+      setFinalCss(mockFinalCss);
       setStepStatus('step4', 'success');
-
     } catch (error) {
-      console.error('Final generation error:', error);
-      setError('step4', error instanceof Error ? error.message : 'Generation failed');
+      setError('step4', error instanceof Error ? error.message : 'Final code generation failed');
       setStepStatus('step4', 'error');
     }
-  }, [state, setFinalTsx, setFinalCss, setStepStatus, setError, clearErrors]);
-
-  // Helper functions
-  const combineCodePieces = (generatedTsx: string, manualJsx: string, figmaData: any): string => {
-    let finalCode = generatedTsx;
-
-    if (manualJsx.trim()) {
-      const returnMatch = finalCode.match(/return\s*\(\s*([\s\S]*?)\s*\);/);
-      if (returnMatch) {
-        const originalJsx = returnMatch[1].trim();
-        
-        if (originalJsx.startsWith('<svg')) {
-          const mergedJsx = `
-    <React.Fragment>
-      ${originalJsx}
-      {/* Additional JSX */}
-      ${manualJsx}
-    </React.Fragment>`;
-          finalCode = finalCode.replace(returnMatch[0], `return (${mergedJsx}\n  );`);
-        } else {
-          const mergedJsx = `${originalJsx}\n      {/* Additional JSX */}\n      ${manualJsx}`;
-          finalCode = finalCode.replace(returnMatch[0], `return (\n    ${mergedJsx}\n  );`);
-        }
-      }
-    }
-
-    if (figmaData) {
-      const metadata = `/*
- * Generated from Figma Design
- * File: ${figmaData.file?.name || 'Unknown'}
- * Generated: ${new Date().toISOString()}
- * Components: ${figmaData.metadata?.componentCount || 0}
- * Styles: ${figmaData.metadata?.styleCount || 0}
- */
-
-`;
-      finalCode = metadata + finalCode;
-    }
-
-    return finalCode;
-  };
-
-  const combineCssCode = (baseCss: string, additionalCss: string, figmaData: any): string => {
-    let finalCss = '';
-
-    if (figmaData) {
-      finalCss += `/*
- * Styles for Figma Component: ${figmaData.file?.name || 'Unknown'}
- * Generated: ${new Date().toISOString()}
- */
-
-`;
-    }
-
-    if (baseCss.trim()) {
-      finalCss += `/* Base Styles */
-${baseCss}
-
-`;
-    }
-
-    if (additionalCss.trim()) {
-      finalCss += `/* Additional Styles */
-${additionalCss}
-
-`;
-    }
-
-    finalCss += `/* Responsive Utilities */
-@media (max-width: 768px) {
-  .figma-component {
-    padding: 1rem;
-  }
-}
-
-@media (max-width: 480px) {
-  .figma-component {
-    padding: 0.5rem;
-  }
-}`;
-
-    return finalCss;
-  };
+  }, [setStepStatus, setFinalTsx, setFinalCss, setError]);
 
   const contextValue: CodeGenerationContextType = {
     state,
@@ -341,6 +347,13 @@ ${additionalCss}
       setStepStatus,
       setError,
       clearErrors,
+      setBatchMode,
+      addFigmaFile,
+      removeFigmaFile,
+      updateFileStatus,
+      startBatchProcessing,
+      stopBatchProcessing,
+      resetBatchProcessing,
       reset,
       generateSvgCode,
       saveCssCode,

@@ -6,7 +6,7 @@ import { UIStateProvider, useUIState } from './UIStateContext';
 
 // Re-export types for compatibility
 export type { FigmaConnectionState } from './FigmaConnectionContext';
-export type { CodeGenerationState } from './CodeGenerationContext';
+export type { CodeGenerationState, FigmaFileItem, BatchProcessingState } from './CodeGenerationContext';
 export type { UIState } from './UIStateContext';
 
 // Legacy interface for backward compatibility
@@ -15,6 +15,37 @@ interface FigmaStepsContextType {
     connection: ReturnType<typeof useFigmaConnection>['state'];
     codeGeneration: ReturnType<typeof useCodeGeneration>['state'];
     ui: ReturnType<typeof useUIState>['state'];
+    // Legacy properties for backward compatibility
+    stepData: {
+      figmaUrl: string;
+      accessToken: string;
+      figmaData: any;
+      svgCode: string;
+      generatedTsxCode: string;
+      cssCode: string;
+      jsxCode: string;
+      moreCssCode: string;
+      finalTsxCode: string;
+      finalCssCode: string;
+      batchProcessing: ReturnType<typeof useCodeGeneration>['state']['batchProcessing'];
+    };
+    stepStatus: {
+      step1: ReturnType<typeof useFigmaConnection>['state']['status'];
+      step2: ReturnType<typeof useCodeGeneration>['state']['stepStatus']['step2'];
+      step3: ReturnType<typeof useCodeGeneration>['state']['stepStatus']['step3'];
+      step4: ReturnType<typeof useCodeGeneration>['state']['stepStatus']['step4'];
+    };
+    uiState: {
+      expandedBlocks: ReturnType<typeof useUIState>['state']['expandedBlocks'];
+      previewMode: ReturnType<typeof useUIState>['state']['previewMode'];
+      errors: {
+        step1: string;
+        step2?: string;
+        step3?: string;
+        step4?: string;
+      };
+      progress: ReturnType<typeof useUIState>['state']['progress'];
+    };
   };
   actions: {
     connection: ReturnType<typeof useFigmaConnection>['actions'];
@@ -34,6 +65,12 @@ interface FigmaStepsContextType {
     saveCssCode: () => void;
     generateFinalCode: () => Promise<void>;
     downloadCode: () => void;
+    setBatchMode: (mode: 'single' | 'batch') => void;
+    addFigmaFile: (file: any) => void;
+    removeFigmaFile: (id: string) => void;
+    startBatchProcessing: () => void;
+    stopBatchProcessing: () => void;
+    resetBatchProcessing: () => void;
   };
 }
 
@@ -119,7 +156,38 @@ const FigmaStepsContent: React.FC<{ children: React.ReactNode }> = ({ children }
     state: {
       connection: connection.state,
       codeGeneration: codeGeneration.state,
-      ui: ui.state
+      ui: ui.state,
+      // Legacy properties
+      stepData: {
+        figmaUrl: connection.state.figmaUrl,
+        accessToken: connection.state.accessToken,
+        figmaData: connection.state.figmaData,
+        svgCode: codeGeneration.state.svgCode,
+        generatedTsxCode: codeGeneration.state.generatedTsxCode,
+        cssCode: codeGeneration.state.cssCode,
+        jsxCode: codeGeneration.state.jsxCode,
+        moreCssCode: codeGeneration.state.moreCssCode,
+        finalTsxCode: codeGeneration.state.finalTsxCode,
+        finalCssCode: codeGeneration.state.finalCssCode,
+        batchProcessing: codeGeneration.state.batchProcessing
+      },
+      stepStatus: {
+        step1: connection.state.status,
+        step2: codeGeneration.state.stepStatus.step2,
+        step3: codeGeneration.state.stepStatus.step3,
+        step4: codeGeneration.state.stepStatus.step4
+      },
+      uiState: {
+        expandedBlocks: ui.state.expandedBlocks,
+        previewMode: ui.state.previewMode,
+        errors: {
+          step1: connection.state.error || '',
+          step2: codeGeneration.state.errors.step2,
+          step3: codeGeneration.state.errors.step3,
+          step4: codeGeneration.state.errors.step4
+        },
+        progress: ui.state.progress
+      }
     },
     actions: {
       connection: connection.actions,
@@ -138,7 +206,13 @@ const FigmaStepsContent: React.FC<{ children: React.ReactNode }> = ({ children }
       generateSvgCode: codeGeneration.actions.generateSvgCode,
       saveCssCode: codeGeneration.actions.saveCssCode,
       generateFinalCode,
-      downloadCode
+      downloadCode,
+      setBatchMode: codeGeneration.actions.setBatchMode,
+      addFigmaFile: codeGeneration.actions.addFigmaFile,
+      removeFigmaFile: codeGeneration.actions.removeFigmaFile,
+      startBatchProcessing: codeGeneration.actions.startBatchProcessing,
+      stopBatchProcessing: codeGeneration.actions.stopBatchProcessing,
+      resetBatchProcessing: codeGeneration.actions.resetBatchProcessing
     }
   };
 

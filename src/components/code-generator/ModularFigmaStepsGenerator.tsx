@@ -19,49 +19,6 @@ import { ErrorBoundary } from '@/components/ErrorBoundary';
  */
 const GeneratorContent: React.FC = () => {
   const { state, actions } = useFigmaSteps();
-  const { connection, codeGeneration, ui } = state;
-
-  // Create legacy state structure for backward compatibility
-  const legacyState = {
-    stepData: {
-      figmaUrl: connection.figmaUrl,
-      accessToken: connection.accessToken,
-      figmaData: connection.figmaData,
-      svgCode: codeGeneration.svgCode,
-      generatedTsxCode: codeGeneration.generatedTsxCode,
-      cssCode: codeGeneration.cssCode,
-      jsxCode: codeGeneration.jsxCode,
-      moreCssCode: codeGeneration.moreCssCode,
-      finalTsxCode: codeGeneration.finalTsxCode,
-      finalCssCode: codeGeneration.finalCssCode,
-      batchProcessing: {
-        isActive: false,
-        mode: 'single' as const,
-        files: [],
-        currentFileIndex: 0,
-        totalProgress: 0,
-        successCount: 0,
-        errorCount: 0,
-        completedFiles: [],
-        failedFiles: []
-      }
-    },
-    stepStatus: {
-      step1: connection.status,
-      step2: codeGeneration.stepStatus.step2,
-      step3: codeGeneration.stepStatus.step3,
-      step4: codeGeneration.stepStatus.step4
-    },
-    uiState: {
-      expandedBlocks: ui.expandedBlocks,
-      previewMode: ui.previewMode,
-      errors: { 
-        step1: connection.error || '',
-        ...codeGeneration.errors 
-      },
-      progress: ui.progress
-    }
-  };
 
   return (
     <div className="min-h-screen bg-gray-900 p-6">
@@ -84,7 +41,7 @@ const GeneratorContent: React.FC = () => {
           
           {/* Header Actions */}
           <div className="flex gap-2">
-            {legacyState.stepStatus.step4 === 'success' && (
+            {state.stepStatus.step4 === 'success' && (
               <>
                 <Button
                   variant="outline"
@@ -98,7 +55,7 @@ const GeneratorContent: React.FC = () => {
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => actions.setUIState({ previewMode: !ui.previewMode })}
+                  onClick={() => actions.setUIState({ previewMode: !state.uiState.previewMode })}
                   className="text-gray-300 border-gray-600 hover:bg-gray-800"
                 >
                   <Eye className="w-4 h-4 mr-2" />
@@ -122,9 +79,9 @@ const GeneratorContent: React.FC = () => {
         <ProgressIndicator />
 
         {/* Batch Processing Indicator */}
-        {legacyState.stepData.batchProcessing.mode === 'batch' && legacyState.stepData.batchProcessing.files.length > 0 && (
+        {state.stepData.batchProcessing.mode === 'batch' && state.stepData.batchProcessing.files.length > 0 && (
           <div className="mb-8">
-            <BatchProgressIndicator batchState={legacyState.stepData.batchProcessing} />
+            <BatchProgressIndicator batchState={state.stepData.batchProcessing} />
           </div>
         )}
 
