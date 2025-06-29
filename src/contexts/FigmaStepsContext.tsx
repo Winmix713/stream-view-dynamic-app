@@ -1,4 +1,3 @@
-
 import React, { createContext, useContext } from 'react';
 import { FigmaConnectionProvider, useFigmaConnection } from './FigmaConnectionContext';
 import { CodeGenerationProvider, useCodeGeneration } from './CodeGenerationContext';
@@ -82,7 +81,6 @@ const FigmaStepsContent: React.FC<{ children: React.ReactNode }> = ({ children }
   const codeGeneration = useCodeGeneration();
   const ui = useUIState();
 
-  // Legacy compatibility methods
   const setStepData = (data: any) => {
     if (data.figmaUrl !== undefined) connection.actions.setUrl(data.figmaUrl);
     if (data.accessToken !== undefined) connection.actions.setToken(data.accessToken);

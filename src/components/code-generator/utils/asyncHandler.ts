@@ -76,7 +76,7 @@ export class AsyncHandler {
         
         if (attempt === retries) {
           // Last attempt failed
-          const handledError = errorHandler.handleError(lastError);
+          const handledError = errorHandler.handleError(lastError, 'AsyncHandler');
           onError?.(lastError);
           throw lastError;
         }

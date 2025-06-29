@@ -34,6 +34,7 @@ const FileListItem: React.FC<FileListItemProps> = ({ file, onRemove, onView }) =
   const getStatusIcon = (status: FigmaFileItem['status']) => {
     switch (status) {
       case 'loading':
+      case 'processing':
         return <Loader2 className="w-4 h-4 text-blue-400 animate-spin" />;
       case 'success':
         return <CheckCircle className="w-4 h-4 text-green-400" />;
@@ -47,6 +48,7 @@ const FileListItem: React.FC<FileListItemProps> = ({ file, onRemove, onView }) =
   const getStatusColor = (status: FigmaFileItem['status']) => {
     switch (status) {
       case 'loading':
+      case 'processing':
         return 'border-blue-500 bg-blue-900/20';
       case 'success':
         return 'border-green-500 bg-green-900/20';
@@ -98,7 +100,7 @@ const FileListItem: React.FC<FileListItemProps> = ({ file, onRemove, onView }) =
         {file.url}
       </div>
       
-      {file.status === 'loading' && (
+      {(file.status === 'loading' || file.status === 'processing') && (
         <Progress value={file.progress} className="h-1 mb-2" />
       )}
       
@@ -200,10 +202,20 @@ export const MultiFigmaFileManager: React.FC = () => {
   const handleAddFile = useCallback(() => {
     if (!newFileUrl.trim()) return;
     
-    actions.addFigmaFile(newFileUrl, newFileName || undefined);
+    // Create FigmaFileItem object with proper structure
+    const fileItem: FigmaFileItem = {
+      id: Date.now().toString(),
+      name: newFileName || `File ${batchProcessing.files.length + 1}`,
+      url: newFileUrl,
+      accessToken: stepData.accessToken,
+      status: 'pending',
+      progress: 0
+    };
+    
+    actions.addFigmaFile(fileItem);
     setNewFileUrl('');
     setNewFileName('');
-  }, [newFileUrl, newFileName, actions]);
+  }, [newFileUrl, newFileName, actions, batchProcessing.files.length, stepData.accessToken]);
 
   const handleRemoveFile = useCallback((id: string) => {
     actions.removeFigmaFile(id);

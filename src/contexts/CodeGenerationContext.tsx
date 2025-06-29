@@ -1,4 +1,3 @@
-
 import React, { createContext, useContext, useReducer, useCallback } from 'react';
 
 // Batch Processing Types
@@ -7,10 +6,11 @@ export interface FigmaFileItem {
   name: string;
   url: string;
   accessToken: string;
-  status: 'pending' | 'processing' | 'success' | 'error';
+  status: 'pending' | 'processing' | 'loading' | 'success' | 'error';
   progress: number;
   error?: string;
   result?: any;
+  processingTime?: number;
 }
 
 export interface BatchProcessingState {

@@ -1,7 +1,18 @@
 
+export class FigmaStepsError extends Error {
+  public code: string;
+  
+  constructor(code: string, message: string) {
+    super(message);
+    this.code = code;
+    this.name = 'FigmaStepsError';
+  }
+}
+
 class ErrorHandler {
-  handleError(error: Error, context: string): string {
-    console.error(`[${context}] Error:`, error);
+  handleError(error: Error, context?: string): string {
+    const contextStr = context ? `[${context}]` : '';
+    console.error(`${contextStr} Error:`, error);
     
     // Common error patterns and user-friendly messages
     if (error.message.includes('fetch')) {
